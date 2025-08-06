@@ -3,7 +3,29 @@
 
 {% block content %}
 <div class="container my-5">
-    <h2 class="text-center">Featured Destinations</h2>
+   
+</div>
+
+<!-- Additional Content Section Starts -->
+<div class="container my-5">
+    <h2 class="text-center text-primary">Africa's Leading Tour Management System</h2>
+
+    <section class="my-4 p-4 bg-white shadow-sm rounded border">
+        <h3>About Us</h3>
+        <p>Nomad Tour Management System is dedicated to providing exceptional travel experiences by offering innovative solutions for organizing and managing tours. With a focus on customer satisfaction and efficiency, we aim to make travel planning seamless and enjoyable for everyone.</p>
+    </section>
+
+    <section class="my-4 p-4 bg-white shadow-sm rounded border">
+        <h3>Why Choose Our Tour Management System?</h3>
+        <ul>
+            <li>Save time by easily organizing and managing your tours in one place.</li>
+            <li>Access detailed itineraries and schedules with just a few clicks.</li>
+            <li>Streamline communication with clients and team members efficiently.</li>
+            <li>Enjoy a user-friendly interface designed to simplify your planning process.</li>
+        </ul>
+    </section>
+
+     <h2 class="text-center">Featured Destinations</h2>
     <div class="row">
         {% for destination in featured_destinations %}
         <div class="col-md-6 mb-4">
@@ -21,5 +43,24 @@
     <div class="text-center mt-3">
         <a href="{% url 'all_destinations' %}" class="btn btn-outline-secondary">View More Destinations</a>
     </div>
+
+    <section class="my-4 p-4 bg-white shadow-sm rounded border">
+        <h3>Testimonials</h3>
+        <ul>
+            <li><strong>John Doe:</strong> "This tour management system has completely transformed the way I plan my trips. Highly recommended!"</li>
+            <li><strong>Jane Smith:</strong> "The user-friendly interface and excellent customer support make this system a must-have for any travel enthusiast."</li>
+            <li><strong>Michael Brown:</strong> "I love how easy it is to organize and manage my tours. It saves me so much time!"</li>
+            <li><strong>Emily Davis:</strong> "The detailed itineraries and seamless communication features are simply amazing. Great job!"</li>
+        </ul>
+    </section>
+
+    <section class="my-4 p-4 bg-white shadow-sm rounded border">
+        <h3>Contact Us</h3>
+        <p>Location: USA</p>
+        <p>Phone Number: +1 (555) 123-4567</p>
+        <p>Address: 123 Main Street, Springfield, USA</p>
+    </section>
 </div>
+<!-- Additional Content Section Ends -->
+
 {% endblock %}
