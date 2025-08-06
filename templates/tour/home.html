@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="text-center">Featured Destinations</h2>
+    <div class="row">
+        {% for destination in featured_destinations %}
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm">
+                <img src="{{ destination.image.url }}" class="card-img-top" alt="{{ destination.name }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ destination.name }}</h5>
+                    <p class="card-text">{{ destination.description|truncatechars:150 }}</p>
+                    <a href="{% url 'destination_detail' destination.id %}" class="btn btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="text-center mt-3">
+        <a href="{% url 'all_destinations' %}" class="btn btn-outline-secondary">View More Destinations</a>
+    </div>
+</div>
+{% endblock %}
