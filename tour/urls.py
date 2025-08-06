@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
     path('', views.homepage, name='home'),
+    path('logout/', views.logout_view, name='logout'),
     path('destinations/', views.all_destinations, name='all_destinations'),  # This is the fix
     path('destination_list', views.destination_list, name='destination_list'),
     path('dashboard/', views.dashboard_view, name='dashboard'),
@@ -30,4 +31,7 @@ urlpatterns = [
     path('export-summary/excel/', views.export_summary_excel, name='export_summary_excel'),
     path('export-summary/pdf/', views.export_summary_pdf, name='export_summary_pdf'),
     path('explore/', views.public_dashboard_view, name='public_dashboard'),
+    
+    path('api/travel-dates/<int:destination_id>/', views.get_travel_dates, name='get_travel_dates'),
+
 ]

@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from .models import Destination, DestinationImage, Room, Restaurant, Activity, Information  
+from django import forms
+from .models import Destination, DateRange
 
 class RegisterForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -9,15 +11,22 @@ class RegisterForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['username', 'email', 'password1', 'password2']
+        
 
 class DestinationForm(forms.ModelForm):
     class Meta:
         model = Destination
-        fields = ['name', 'country', 'start_date', 'end_date', 'description', 'map_embed_code']
+        fields = ['name', 'country', 'description', 'map_embed_code']
+
+class DateRangeForm(forms.ModelForm):
+    class Meta:
+        model = DateRange
+        fields = ['start_date', 'end_date']
         widgets = {
             'start_date': forms.DateInput(attrs={'type': 'date'}),
             'end_date': forms.DateInput(attrs={'type': 'date'}),
         }
+
     def clean(self):
         cleaned_data = super().clean()
         start_date = cleaned_data.get("start_date")
@@ -25,6 +34,23 @@ class DestinationForm(forms.ModelForm):
 
         if start_date and end_date and start_date > end_date:
             raise forms.ValidationError("Start date cannot be after end date.")
+
+
+# class DestinationForm(forms.ModelForm):
+#     class Meta:
+#         model = Destination
+#         fields = ['name', 'country', 'start_date', 'end_date', 'description', 'map_embed_code']
+#         widgets = {
+#             'start_date': forms.DateInput(attrs={'type': 'date'}),
+#             'end_date': forms.DateInput(attrs={'type': 'date'}),
+#         }
+#     def clean(self):
+#         cleaned_data = super().clean()
+#         start_date = cleaned_data.get("start_date")
+#         end_date = cleaned_data.get("end_date")
+
+#         if start_date and end_date and start_date > end_date:
+#             raise forms.ValidationError("Start date cannot be after end date.")
 
 
 from .models import DestinationImage, Room, Restaurant
@@ -70,18 +96,50 @@ class RestaurantForm(forms.ModelForm):
         model = Restaurant
         fields = ['name', 'description', 'image']  
 
+class DateRangeForm(forms.ModelForm):
+    class Meta:
+        model = DateRange
+        fields = ['start_date', 'end_date']
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'type': 'date'}),
+        }
 
-# forms.py
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+
+        if start_date and end_date and start_date > end_date:
+            raise forms.ValidationError("Start date cannot be after end date.")
+
+from django import forms
+from .models import Activity
 
 class ActivityForm(forms.ModelForm):
     class Meta:
         model = Activity
-        fields = ['title', 'description', 'date', 'start_time', 'end_time']
+        fields = ['destination', 'title', 'description', 'date', 'start_time', 'end_time']  # only field names here
         widgets = {
-            'date': forms.DateInput(attrs={'type': 'date'}),
+            'destination': forms.Select(attrs={'id': 'destinationSelect'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'id': 'dateInput'}),
             'start_time': forms.TimeInput(attrs={'type': 'time'}),
             'end_time': forms.TimeInput(attrs={'type': 'time'}),
+            'title': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        destination = cleaned_data.get('destination')
+        date = cleaned_data.get('date')
+
+        if destination and date:
+            valid_dates = destination.get_valid_dates()
+            if date not in valid_dates:
+                raise forms.ValidationError(
+                    f"The date {date} is not within the allowed travel dates for {destination.name}."
+                )
 
 
 class InformationForm(forms.ModelForm):

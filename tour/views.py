@@ -14,6 +14,12 @@ from .models import Destination  # adjust import based on your app structure
 from django.shortcuts import render
 from .models import Destination
 # tour/views.py
+from django.contrib.auth import logout
+from django.shortcuts import redirect
+
+def logout_view(request):
+    logout(request)
+    return redirect('home')  # or wherever you want to redirect after logout
 
 
 def all_destinations(request):
@@ -33,26 +39,71 @@ def destination_list(request):
     return render(request, 'tour/destination_list.html', {'destinations': destinations})
 
 from datetime import timedelta
+from datetime import timedelta
+from datetime import timedelta
 
 def destination_detail(request, id):
     destination = get_object_or_404(Destination, id=id)
-
     days = []
-    current = destination.start_date
-    while current <= destination.end_date:
-        day_activities = destination.activities.filter(date=current)
-        days.append({
-            'date': current,
-            'activities': day_activities
-        })
-        current += timedelta(days=1)
 
-    tab_labels = ['Gallery', 'Rooms', 'Restaurants', 'Activities and Services', 'Information','Map']
+    for date_range in destination.date_ranges.all():
+        current = date_range.start_date
+        while current <= date_range.end_date:
+            day_activities = destination.activities.filter(date=current).order_by('start_time')
+            days.append({
+                'date': current,
+                'activities': day_activities
+            })
+            current += timedelta(days=1)
+
+    tab_labels = ['Gallery', 'Rooms', 'Restaurants', 'Activities and Services', 'Information', 'Map']
     return render(request, 'tour/destination_detail.html', {
         'destination': destination,
         'tab_labels': tab_labels,
         'itinerary_days': days,
     })
+
+
+# def destination_detail(request, id):
+#     destination = get_object_or_404(Destination, id=id)
+#     days = []
+
+#     for date_range in destination.date_ranges.all():
+#         current = date_range.start_date
+#         while current <= date_range.end_date:
+#             day_activities = destination.activities.filter(date=current)
+#             days.append({
+#                 'date': current,
+#                 'activities': day_activities
+#             })
+#             current += timedelta(days=1)
+
+#     tab_labels = ['Gallery', 'Rooms', 'Restaurants', 'Activities and Services', 'Information','Map']
+#     return render(request, 'tour/destination_detail.html', {
+#         'destination': destination,
+#         'tab_labels': tab_labels,
+#         'itinerary_days': days,
+#     })
+
+# def destination_detail(request, id):
+#     destination = get_object_or_404(Destination, id=id)
+
+#     days = []
+#     current = destination.start_date
+#     while current <= destination.end_date:
+#         day_activities = destination.activities.filter(date=current)
+#         days.append({
+#             'date': current,
+#             'activities': day_activities
+#         })
+#         current += timedelta(days=1)
+
+#     tab_labels = ['Gallery', 'Rooms', 'Restaurants', 'Activities and Services', 'Information','Map']
+#     return render(request, 'tour/destination_detail.html', {
+#         'destination': destination,
+#         'tab_labels': tab_labels,
+#         'itinerary_days': days,
+#     })
 
 
 
@@ -74,18 +125,51 @@ def dashboard_view(request):
     destinations = request.user.destinations.all()
     return render(request, 'tour/dashboard.html', {'destinations': destinations})
 
+from django.forms import modelformset_factory
+from .forms import DateRangeForm
+
 @login_required
 def add_destination_view(request):
+    DateRangeFormSet = modelformset_factory(DateRange, form=DateRangeForm, extra=1)
+
     if request.method == 'POST':
         form = DestinationForm(request.POST)
-        if form.is_valid():
+        formset = DateRangeFormSet(request.POST, queryset=DateRange.objects.none())
+        
+        if form.is_valid() and formset.is_valid():
             dest = form.save(commit=False)
             dest.user = request.user
             dest.save()
+
+            for subform in formset:
+                if subform.cleaned_data:
+                    date_range = subform.save(commit=False)
+                    date_range.destination = dest
+                    date_range.save()
+
             return redirect('dashboard')
     else:
         form = DestinationForm()
-    return render(request, 'tour/add_destination.html', {'form': form})
+        formset = DateRangeFormSet(queryset=DateRange.objects.none())
+
+    return render(request, 'tour/add_destination.html', {
+        'form': form,
+        'date_formset': formset,
+    })
+
+
+# @login_required
+# def add_destination_view(request):
+#     if request.method == 'POST':
+#         form = DestinationForm(request.POST)
+#         if form.is_valid():
+#             dest = form.save(commit=False)
+#             dest.user = request.user
+#             dest.save()
+#             return redirect('dashboard')
+#     else:
+#         form = DestinationForm()
+#     return render(request, 'tour/add_destination.html', {'form': form})
 
 
 
@@ -214,6 +298,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from .models import Destination
 from datetime import datetime
+from .models import Destination, Room, DateRange
+from datetime import datetime
+from django.db.models import Q
 
 @login_required
 def accommodation_summary_view(request):
@@ -222,35 +309,40 @@ def accommodation_summary_view(request):
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')
 
-    destinations = Destination.objects.filter(user=client).prefetch_related('rooms')
+    # Parse the date strings if they exist
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
 
-    if start_date_str:
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        destinations = destinations.filter(start_date__gte=start_date)
-
-    if end_date_str:
-        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        destinations = destinations.filter(end_date__lte=end_date)
+    # Get all destinations for the client
+    destinations = Destination.objects.filter(user=client).prefetch_related('rooms', 'daterange_set')
 
     summary = []
     grand_total = 0
 
     for destination in destinations:
-        destination_total = 0
-        for room in destination.rooms.all():
-            room_cost = room.cost * room.nights
-            summary.append({
-                'start_date': destination.start_date,
-                'end_date': destination.end_date,
-                'destination': destination.name,
-                'accommodation': room.name,
-                'basis': room.basis,
-                'nights': room.nights,
-                'cost': room.cost,
-                'total_cost': room_cost,
-            })
-            destination_total += room_cost
-        grand_total += destination_total
+        # Filter date ranges based on input (if any)
+        date_ranges = destination.daterange_set.all()
+        if start_date:
+            date_ranges = date_ranges.filter(end_date__gte=start_date)
+        if end_date:
+            date_ranges = date_ranges.filter(start_date__lte=end_date)
+
+        for date_range in date_ranges:
+            destination_total = 0
+            for room in destination.rooms.all():
+                room_cost = room.cost * room.nights
+                summary.append({
+                    'start_date': date_range.start_date,
+                    'end_date': date_range.end_date,
+                    'destination': destination.name,
+                    'accommodation': room.name,
+                    'basis': room.basis,
+                    'nights': room.nights,
+                    'cost': room.cost,
+                    'total_cost': room_cost,
+                })
+                destination_total += room_cost
+            grand_total += destination_total
 
     return render(request, 'tour/accommodation_summary.html', {
         'summary': summary,
@@ -259,21 +351,69 @@ def accommodation_summary_view(request):
         'end_date': end_date_str,
     })
 
+# @login_required
+# def accommodation_summary_view(request):
+#     client = request.user
+
+#     start_date_str = request.GET.get('start_date')
+#     end_date_str = request.GET.get('end_date')
+    
+    
+
+#     destinations = Destination.objects.filter(user=client).prefetch_related('rooms')
+#     if start_date_str:
+#         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+#         destinations = destinations.filter(start_date__gte=start_date)
+
+#     if end_date_str:
+#         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+#         destinations = destinations.filter(end_date__lte=end_date)
+
+#     summary = []
+#     grand_total = 0
+
+#     for destination in destinations:
+#         destination_total = 0
+#         for room in destination.rooms.all():
+#             room_cost = room.cost * room.nights
+#             summary.append({
+#                 'start_date': destination.start_date,
+#                 'end_date': destination.end_date,
+#                 'destination': destination.name,
+#                 'accommodation': room.name,
+#                 'basis': room.basis,
+#                 'nights': room.nights,
+#                 'cost': room.cost,
+#                 'total_cost': room_cost,
+#             })
+#             destination_total += room_cost
+#         grand_total += destination_total
+
+#     return render(request, 'tour/accommodation_summary.html', {
+#         'summary': summary,
+#         'grand_total': grand_total,
+#         'start_date': start_date_str,
+#         'end_date': end_date_str,
+#     })
+
 import openpyxl
 from django.http import HttpResponse
+import openpyxl
+from django.http import HttpResponse
+from datetime import datetime
+from .models import Destination
 
 @login_required
 def export_summary_excel(request):
-    # same logic as before
     user = request.user
-    start_date = request.GET.get('start_date')
-    end_date = request.GET.get('end_date')
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
 
-    destinations = Destination.objects.filter(user=user).prefetch_related('rooms')
-    if start_date:
-        destinations = destinations.filter(start_date__gte=start_date)
-    if end_date:
-        destinations = destinations.filter(end_date__lte=end_date)
+    # Parse dates
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+
+    destinations = Destination.objects.filter(user=user).prefetch_related('rooms', 'daterange_set')
 
     workbook = openpyxl.Workbook()
     sheet = workbook.active
@@ -282,18 +422,25 @@ def export_summary_excel(request):
     sheet.append(headers)
 
     for dest in destinations:
-        for room in dest.rooms.all():
-            total = room.cost * room.nights
-            sheet.append([
-                dest.start_date,
-                dest.end_date,
-                dest.name,
-                room.name,
-                room.basis,
-                room.nights,
-                float(room.cost),
-                float(total)
-            ])
+        date_ranges = dest.daterange_set.all()
+        if start_date:
+            date_ranges = date_ranges.filter(end_date__gte=start_date)
+        if end_date:
+            date_ranges = date_ranges.filter(start_date__lte=end_date)
+
+        for dr in date_ranges:
+            for room in dest.rooms.all():
+                total = room.cost * room.nights
+                sheet.append([
+                    dr.start_date,
+                    dr.end_date,
+                    dest.name,
+                    room.name,
+                    room.basis,
+                    room.nights,
+                    float(room.cost),
+                    float(total)
+                ])
 
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -302,34 +449,50 @@ def export_summary_excel(request):
     workbook.save(response)
     return response
 
+
+   
+
 from django.template.loader import get_template
 from xhtml2pdf import pisa
 
 @login_required
 def export_summary_pdf(request):
-    user = request.user
-    start_date = request.GET.get('start_date')
-    end_date = request.GET.get('end_date')
+    from django.template.loader import get_template
+    from xhtml2pdf import pisa
+    from django.http import HttpResponse
+    from datetime import datetime
+    from .models import Destination
 
-    destinations = Destination.objects.filter(user=user).prefetch_related('rooms')
-    if start_date:
-        destinations = destinations.filter(start_date__gte=start_date)
-    if end_date:
-        destinations = destinations.filter(end_date__lte=end_date)
+    user = request.user
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+
+    destinations = Destination.objects.filter(user=user).prefetch_related('rooms', 'date_ranges')
 
     summary = []
+
     for destination in destinations:
-        for room in destination.rooms.all():
-            summary.append({
-                'start_date': destination.start_date,
-                'end_date': destination.end_date,
-                'destination': destination.name,
-                'accommodation': room.name,
-                'basis': room.basis,
-                'nights': room.nights,
-                'cost': room.cost,
-                'total_cost': room.cost * room.nights,
-            })
+        date_ranges = destination.date_ranges.all()
+        if start_date:
+            date_ranges = date_ranges.filter(end_date__gte=start_date)
+        if end_date:
+            date_ranges = date_ranges.filter(start_date__lte=end_date)
+
+        for date_range in date_ranges:
+            for room in destination.rooms.all():
+                summary.append({
+                    'start_date': date_range.start_date,
+                    'end_date': date_range.end_date,
+                    'destination': destination.name,
+                    'accommodation': room.name,
+                    'basis': room.basis,
+                    'nights': room.nights,
+                    'cost': room.cost,
+                    'total_cost': room.cost * room.nights,
+                })
 
     template = get_template('tour/summary_pdf_template.html')
     html = template.render({'summary': summary})
@@ -339,42 +502,128 @@ def export_summary_pdf(request):
     pisa.CreatePDF(html, dest=response)
     return response
 
+
+# @login_required
+# def export_summary_pdf(request):
+#     user = request.user
+#     start_date = request.GET.get('start_date')
+#     end_date = request.GET.get('end_date')
+
+#     destinations = Destination.objects.filter(user=user).prefetch_related('rooms')
+#     if start_date:
+#         destinations = destinations.filter(start_date__gte=start_date)
+#     if end_date:
+#         destinations = destinations.filter(end_date__lte=end_date)
+
+#     summary = []
+#     for destination in destinations:
+#         for room in destination.rooms.all():
+#             summary.append({
+#                 'start_date': destination.start_date,
+#                 'end_date': destination.end_date,
+#                 'destination': destination.name,
+#                 'accommodation': room.name,
+#                 'basis': room.basis,
+#                 'nights': room.nights,
+#                 'cost': room.cost,
+#                 'total_cost': room.cost * room.nights,
+#             })
+
+#     template = get_template('tour/summary_pdf_template.html')
+#     html = template.render({'summary': summary})
+#     response = HttpResponse(content_type='application/pdf')
+#     response['Content-Disposition'] = 'attachment; filename="accommodation_summary.pdf"'
+
+#     pisa.CreatePDF(html, dest=response)
+#     return response
+
 from django.shortcuts import render
 from .models import Destination
 from datetime import timedelta
 
 from django.db.models import Sum
 # utils.py or at the top of views.py
-
-def get_accommodation_summary(destinations):
+def get_accommodation_summary(destinations, start_date=None, end_date=None):
     summary = []
+
     for destination in destinations:
-        for room in destination.rooms.all():
-            summary.append({
-                'start_date': destination.start_date,
-                'end_date': destination.end_date,
-                'destination': destination.name,
-                'accommodation': room.name,
-                'basis': room.basis,
-                'nights': room.nights,
-                'cost': room.cost,
-                'total_cost': room.cost * room.nights,
-            })
+        date_ranges = destination.date_ranges.all()
+        if start_date:
+            date_ranges = date_ranges.filter(end_date__gte=start_date)
+        if end_date:
+            date_ranges = date_ranges.filter(start_date__lte=end_date)
+
+        for date_range in date_ranges:
+            for room in destination.rooms.all():
+                summary.append({
+                    'start_date': date_range.start_date,
+                    'end_date': date_range.end_date,
+                    'destination': destination.name,
+                    'accommodation': room.name,
+                    'basis': room.basis,
+                    'nights': room.nights,
+                    'cost': room.cost,
+                    'total_cost': room.cost * room.nights,
+                })
     return summary
 
 
+# def get_accommodation_summary(destinations):
+#     summary = []
+#     for destination in destinations:
+#         for room in destination.rooms.all():
+#             summary.append({
+#                 'start_date': destination.start_date,
+#                 'end_date': destination.end_date,
+#                 'destination': destination.name,
+#                 'accommodation': room.name,
+#                 'basis': room.basis,
+#                 'nights': room.nights,
+#                 'cost': room.cost,
+#                 'total_cost': room.cost * room.nights,
+#             })
+#     return summary
+
+
+# def public_dashboard_view(request):
+#     destinations = Destination.objects.all()[:2]
+
+#     for dest in destinations:
+#         days = []
+#         for date_range in dest.date_ranges.all():
+#             current = date_range.start_date
+#             while current <= date_range.end_date:
+#                 activities = dest.activities.filter(date=current)
+#                 days.append({'date': current, 'activities': activities})
+#                 current += timedelta(days=1)
+#         dest.itinerary_days = days
+#         totals = dest.rooms.aggregate(
+#             total_nights=Sum('nights'),
+#             total_cost=Sum('cost')
+#         )
+#         dest.total_nights = totals['total_nights'] or 0
+#         dest.total_cost = totals['total_cost'] or 0
+
+#     summary = get_accommodation_summary(destinations)
+
+#     return render(request, 'tour/public_dashboard.html', {
+#         'destinations': destinations,
+#         'summary': summary,
+#     })
+
+
 def public_dashboard_view(request):
-    destinations = Destination.objects.all()[:2]
+    destinations = Destination.objects.all().prefetch_related('rooms', 'date_ranges', 'activities')[:2]
 
     for dest in destinations:
         days = []
-        current = dest.start_date
-        while current <= dest.end_date:
-            activities = dest.activities.filter(date=current)
-            days.append({'date': current, 'activities': activities})
-            current += timedelta(days=1)
+        for date_range in dest.date_ranges.all():
+            current = date_range.start_date
+            while current <= date_range.end_date:
+                activities = dest.activities.filter(date=current)
+                days.append({'date': current, 'activities': activities})
+                current += timedelta(days=1)
         dest.itinerary_days = days
-
         totals = dest.rooms.aggregate(
             total_nights=Sum('nights'),
             total_cost=Sum('cost')
@@ -383,7 +632,6 @@ def public_dashboard_view(request):
         dest.total_cost = totals['total_cost'] or 0
 
     summary = get_accommodation_summary(destinations)
-
     return render(request, 'tour/public_dashboard.html', {
         'destinations': destinations,
         'summary': summary,
@@ -391,26 +639,17 @@ def public_dashboard_view(request):
 
 
 
-# def public_dashboard_view(request):
-#     destinations = Destination.objects.all()[:2]
+from django.http import JsonResponse
+from .models import Destination, DateRange
 
-#     for dest in destinations:
-#         # Activities per day
-#         days = []
-#         current = dest.start_date
-#         while current <= dest.end_date:
-#             activities = dest.activities.filter(date=current)
-#             days.append({'date': current, 'activities': activities})
-#             current += timedelta(days=1)
-#         dest.itinerary_days = days
+def get_travel_dates(request, destination_id):
+    date_ranges = DateRange.objects.filter(destination_id=destination_id)
+    dates = []
 
-#         # Total nights and cost
-#         totals = dest.rooms.aggregate(
-#             total_nights=Sum('nights'),
-#             total_cost=Sum('cost')
-#         )
-#         dest.total_nights = totals['total_nights'] or 0
-#         dest.total_cost = totals['total_cost'] or 0
+    for dr in date_ranges:
+        current = dr.start_date
+        while current <= dr.end_date:
+            dates.append(current.strftime('%Y-%m-%d'))
+            current += timedelta(days=1)
 
-#     return render(request, 'tour/public_dashboard.html', {'destinations': destinations})
-
+    return JsonResponse({'dates': dates})
